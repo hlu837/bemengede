@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gebeta Map Bridge</title>
+<!-- TEMPORARY: reverted to raw MapLibre GL JS to test the newly-issued
+     token in isolation, since Gebeta's own official SDK CDN URL
+     (https://tiles.gebeta.app/static/gebeta-maps.umd.js) is currently
+     returning 404 on their end. Once that's fixed, switch back to the
+     GebetaMaps SDK version. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.7.3/maplibre-gl.min.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.7.3/maplibre-gl.min.css" rel="stylesheet"/>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+  #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<script>
+  // ── Bridge to Flutter (LocationPickerScreen / live tracking map) ─────────
+  // Flutter -> here (postMessage payloads):
+  //   { type: 'gebeta:init', apiKey, styleUrl, lat, lng, zoom, interactive }
+  //   { type: 'gebeta:setMarker', lat, lng }
+  //   { type: 'gebeta:clearMarker' }
+  //   { type: 'gebeta:animateTo', lat, lng, zoom }
+  //
+  // here -> Flutter (postMessage payloads):
+  //   { type: 'gebeta:ready' }               -- sent once, on script load
+  //   { type: 'gebeta:loaded' }               -- style finished loading
+  //   { type: 'gebeta:click', lat, lng }      -- user tapped the map (only if interactive)
+  //   { type: 'gebeta:error', message }
+
+  let map = null;
+  let marker = null;
+  let interactive = true;
+
+  function post(payload) {
+    window.parent.postMessage(payload, '*');
+  }
+
+  function initMap({ apiKey, styleUrl, lat, lng, zoom, interactive: interactiveFlag }) {
+    interactive = interactiveFlag !== false;
+
+    map = new maplibregl.Map({
+      container: 'map',
+      style: styleUrl,
+      center: [lng, lat],
+      zoom: zoom || 13,
+      attributionControl: true,
+      interactive: interactive,
+      transformRequest: (url, resourceType) => {
+        if (url.includes('tiles.gebeta.app')) {
+          const sep = url.includes('?') ? '&' : '?';
+          return { url: `${url}${sep}apiKey=${encodeURIComponent(apiKey)}` };
+        }
+        return { url };
+      }
+    });
+
+    if (interactive) {
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+    }
+
+    map.on('load', () => post({ type: 'gebeta:loaded' }));
+    map.on('error', (e) => post({ type: 'gebeta:error', message: String(e && e.error) }));
+
+    if (interactive) {
+      map.on('click', (e) => {
+        const { lng, lat } = e.lngLat;
+        setMarker(lat, lng);
+        post({ type: 'gebeta:click', lat, lng });
+      });
+    }
+
+    if (lat != null && lng != null) {
+      setMarker(lat, lng);
+    }
+  }
+
+  function setMarker(lat, lng) {
+    if (!map) return;
+    if (marker) {
+      marker.setLngLat([lng, lat]);
+    } else {
+      marker = new maplibregl.Marker({ color: '#1E7E34' }).setLngLat([lng, lat]).addTo(map);
+    }
+  }
+
+  function clearMarker() {
+    if (marker) {
+      marker.remove();
+      marker = null;
+    }
+  }
+
+  window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+
+    switch (data.type) {
+      case 'gebeta:init':
+        initMap(data);
+        break;
+      case 'gebeta:setMarker':
+        setMarker(data.lat, data.lng);
+        break;
+      case 'gebeta:clearMarker':
+        clearMarker();
+        break;
+      case 'gebeta:animateTo':
+        if (map) {
+          map.flyTo({ center: [data.lng, data.lat], zoom: data.zoom || map.getZoom() });
+        }
+        break;
+    }
+  });
+
+  // Let Flutter know we're ready to receive 'gebeta:init'.
+  post({ type: 'gebeta:ready' });
+</script>
+</body>
+</html>
