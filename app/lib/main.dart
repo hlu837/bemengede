@@ -69,37 +69,6 @@ class BemengedeApp extends ConsumerWidget {
         ),
       ),
       routerConfig: router,
-      // TEMPORARY DIAGNOSTIC — remove after confirming whether
-      // GEBETA_API_KEY reached the release build.
-      builder: (context, child) {
-        return Stack(
-          children: [
-            if (child != null) child,
-            Positioned(
-              top: 40,
-              left: 8,
-              right: 8,
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: GebetaService.isApiKeyMissing
-                        ? Colors.red
-                        : Colors.green,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'GEBETA_API_KEY missing=${GebetaService.isApiKeyMissing} '
-                    'len=${GebetaService.apiKey.length}',
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }
