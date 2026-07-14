@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:gebeta_gl/gebeta_gl.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/gebeta_service.dart';
 import '../../services/data_service.dart';
@@ -178,9 +179,36 @@ class _LocationPickerState extends State<LocationPickerScreen> {
   bool _searching = false;
   String? _searchError;
 
+  // gebeta_gl's `myLocationEnabled` turns on MapLibre's native "my location"
+  // layer, but the plugin does NOT request the Android runtime location
+  // permission itself (confirmed in Gebeta's own docs). If we pass
+  // myLocationEnabled: true before permission is granted, the native map
+  // view fails to render at all on Android 6.0+ — no crash, no dialog, just
+  // a blank screen. So: request permission first, and only ask the map to
+  // show the location layer once we know it's actually granted.
+  bool _myLocationEnabled = false;
+
   @override
   void initState() {
     super.initState();
+    _ensureLocationPermission();
+  }
+
+  Future<void> _ensureLocationPermission() async {
+    if (kIsWeb) return;
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      final granted = permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always;
+      if (mounted) setState(() => _myLocationEnabled = granted);
+    } catch (_) {
+      // Leave _myLocationEnabled false — the pin-drop flow still works
+      // without the blue "my location" dot.
+    }
   }
 
   @override
@@ -388,7 +416,7 @@ class _LocationPickerState extends State<LocationPickerScreen> {
                           zoom: _kDefaultZoom,
                         ),
                         onMapCreated: _onMapCreated,
-                        myLocationEnabled: true,
+                        myLocationEnabled: _myLocationEnabled,
                         onMapClick: (point, coordinates) =>
                             _dropPin(coordinates),
                       )
