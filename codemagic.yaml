@@ -1,0 +1,13 @@
+workflows:
+  default-workflow:
+    name: Default Workflow
+    working_directory: app
+    environment:
+      flutter: stable
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build Android
+        script: flutter build apk --release
+    artifacts:
+      - app/build/**/outputs/**/*.apk
