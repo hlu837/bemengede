@@ -10,4 +10,4 @@ workflows:
       - name: Build Android
         script: flutter build apk --release
     artifacts:
-      - app/build/**/outputs/**/*.apk
+     - app/**/build/**/outputs/**/*.apk
