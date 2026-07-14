@@ -4,11 +4,13 @@ workflows:
     working_directory: app
     environment:
       flutter: stable
+      groups:
+        - gebeta
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build Android
-        script: flutter build apk --release
+        script: flutter build apk --release --dart-define=GEBETA_API_KEY=$GEBETA_API_KEY
     artifacts:
       - app/build/app/outputs/flutter-apk/*.apk
       - build/app/outputs/flutter-apk/*.apk
