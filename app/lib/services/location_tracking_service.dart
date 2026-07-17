@@ -79,7 +79,7 @@ class LocationTrackingService {
   /// Call when the traveler flips the "Live" toggle OFF.
   Future<void> goOffline() async {
     _isOnline = false;
-    final travelerId = _travelerId;
+    final travelerId = _travelerId ?? _sb.auth.currentUser?.id;
     _travelerId = null;
 
     if (travelerId != null) {

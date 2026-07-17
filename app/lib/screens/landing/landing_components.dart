@@ -229,49 +229,59 @@ class HeroSection extends StatelessWidget {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width >= 768;
 
-    return SizedBox(
-      width: double.infinity,
-      height: size.height,
+    // NOTE: this used to be a hard `height: size.height` with `Stack(fit:
+    // StackFit.expand)`, forcing every device to fit the badge + two title
+    // lines + description + buttons + stats into exactly one screen height
+    // with zero tolerance. Any screen shorter than that content (smaller
+    // phones, ones with a tall status bar, etc.) overflowed and rendered
+    // clipped/broken. `minHeight` keeps the "full-bleed hero" look on
+    // screens tall enough for it, but lets the section grow instead of
+    // clipping on ones that aren't.
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: size.height),
       child: Stack(
-        fit: StackFit.expand,
         children: [
-          Image.asset(
-            'assets/images/hero-bg.jpg',
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                color: Colors.grey.shade300,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.image_not_supported,
-                        size: 64,
-                        color: Colors.grey.shade600,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Hero image not found\nPlace hero-bg.jpg in assets/images/',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    ],
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/hero-bg.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey.shade300,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.image_not_supported,
+                          size: 64,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Hero image not found\nPlace hero-bg.jpg in assets/images/',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withOpacity(0.55),
-                  Colors.black.withOpacity(0.45),
-                  Colors.black.withOpacity(0.65),
-                ],
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.55),
+                    Colors.black.withOpacity(0.45),
+                    Colors.black.withOpacity(0.65),
+                  ],
+                ),
               ),
             ),
           ),
@@ -279,6 +289,7 @@ class HeroSection extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const SizedBox(height: 60),

@@ -17,9 +17,20 @@ class AuthState {
   final UserProfile? profile;
   final bool loading;
   final bool blocked;
+  // True only until the very first session/profile check (app boot) has
+  // finished. Deliberately separate from `loading`, which also flips true
+  // during ordinary sign-in/sign-up/etc button presses — main.dart uses
+  // this one to show a one-time splash instead of the Landing Page while
+  // GoRouter doesn't yet know where to send you, without hijacking the
+  // whole screen on every later login attempt too.
+  final bool initializing;
 
   const AuthState(
-      {this.user, this.profile, this.loading = true, this.blocked = false});
+      {this.user,
+      this.profile,
+      this.loading = true,
+      this.blocked = false,
+      this.initializing = true});
 
   bool get isAuthenticated => user != null && profile != null;
   bool get isAdmin =>
@@ -31,6 +42,7 @@ class AuthState {
     UserProfile? profile,
     bool? loading,
     bool? blocked,
+    bool? initializing,
     bool clearUser = false,
     bool clearProfile = false,
   }) =>
@@ -39,6 +51,7 @@ class AuthState {
         profile: clearProfile ? null : (profile ?? this.profile),
         loading: loading ?? this.loading,
         blocked: blocked ?? this.blocked,
+        initializing: initializing ?? this.initializing,
       );
 }
 
@@ -81,12 +94,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final blocked = await _svc.isUserBlocked(user.id);
         if (mounted) {
           state = AuthState(
-              user: user, profile: profile, loading: false, blocked: blocked);
+              user: user,
+              profile: profile,
+              loading: false,
+              blocked: blocked,
+              initializing: false);
           _startBlockPolling(user.id);
         }
       } else {
         _blockCheckTimer?.cancel();
-        if (mounted) state = const AuthState(loading: false);
+        if (mounted) {
+          state = const AuthState(loading: false, initializing: false);
+        }
       }
     });
 
@@ -96,10 +115,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final profile = await _svc.fetchProfile(user.id);
       final blocked = await _svc.isUserBlocked(user.id);
       state = AuthState(
-          user: user, profile: profile, loading: false, blocked: blocked);
+          user: user,
+          profile: profile,
+          loading: false,
+          blocked: blocked,
+          initializing: false);
       _startBlockPolling(user.id);
     } else {
-      state = const AuthState(loading: false);
+      state = const AuthState(loading: false, initializing: false);
     }
   }
 
@@ -115,7 +138,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final blocked = await _svc.isUserBlocked(user.id);
         if (mounted) {
           state = AuthState(
-              user: user, profile: profile, loading: false, blocked: blocked);
+              user: user,
+              profile: profile,
+              loading: false,
+              blocked: blocked,
+              initializing: false);
         }
       } else {
         state = state.copyWith(loading: false);
@@ -158,7 +185,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (LocationTrackingService().isOnline) {
       await LocationTrackingService().goOffline();
     }
-    state = const AuthState(loading: false);
+    state = const AuthState(loading: false, initializing: false);
     try {
       await _svc.signOut();
     } catch (_) {

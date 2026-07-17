@@ -69,8 +69,8 @@ class DataService {
       // column, not a key/value table — use the SECURITY DEFINER function
       // from supabase_system_settings.sql instead, which any signed-in user
       // can call safely.
-      final blocked = await _sb
-          .rpc('is_user_blocked', params: {'check_user_id': userId});
+      final blocked =
+          await _sb.rpc('is_user_blocked', params: {'check_user_id': userId});
       return blocked as bool? ?? false;
     } catch (e) {
       return false;
@@ -228,7 +228,8 @@ class DataService {
           .from('packages')
           .update({'status': 'matched'})
           .eq('id', packageId)
-          .eq('status', 'pending') // guards against a race with another traveler
+          .eq('status',
+              'pending') // guards against a race with another traveler
           .select('id');
       if (packageUpdate.isEmpty) {
         return 'Someone else already matched with this package.';
@@ -259,7 +260,6 @@ class DataService {
       return e.toString();
     }
   }
-
 
   // ── Traveler Offers ───────────────────────────────────────────────────────
 
@@ -1317,9 +1317,21 @@ After payment, go to "Commission Payment" in your dashboard and upload your paym
 
   Future<void> expireOldRequests() async {
     try {
-      // Packages pending > 2 hours with no traveler acceptance expire automatically
-      final cutoff =
-          DateTime.now().subtract(const Duration(hours: 2)).toIso8601String();
+      // Packages pending > 2 hours with no traveler acceptance expire automatically.
+      // IMPORTANT: must convert to UTC first. DateTime.now() is the device's
+      // local time, and toIso8601String() on a non-UTC DateTime prints the
+      // wall-clock numbers with no timezone marker at all — Postgres then
+      // reads that bare string using its *session* timezone (UTC on
+      // Supabase). For a traveler/sender in Addis Ababa (UTC+3) that shifted
+      // the cutoff 3 hours later than intended, i.e. into the future,
+      // matching every currently-pending package — including ones posted
+      // seconds earlier — and silently expiring them the moment anyone
+      // opened the app. Converting to UTC first (and getting the trailing
+      // 'Z') makes the timestamp unambiguous.
+      final cutoff = DateTime.now()
+          .toUtc()
+          .subtract(const Duration(hours: 2))
+          .toIso8601String();
       await _sb
           .from('packages')
           .update({'status': 'expired'})

@@ -14,12 +14,12 @@ class AuthResult {
 }
 
 class AuthService {
-  final _sb      = Supabase.instance.client;
-  final _backend = AppConstants.backendUrl;  // https://packlink-sigma.vercel.app
+  final _sb = Supabase.instance.client;
+  final _backend = AppConstants.backendUrl; // https://packlink-sigma.vercel.app
 
   // ── Current Session ───────────────────────────────────────────────────────
 
-  User?    get currentUser    => _sb.auth.currentUser;
+  User? get currentUser => _sb.auth.currentUser;
   Session? get currentSession => _sb.auth.currentSession;
   Stream<AuthState> get authStateChanges => _sb.auth.onAuthStateChange;
 
@@ -27,9 +27,12 @@ class AuthService {
 
   Future<UserProfile?> fetchProfile(String userId) async {
     try {
-      final data = await _sb.from('profiles').select().eq('id', userId).maybeSingle();
+      final data =
+          await _sb.from('profiles').select().eq('id', userId).maybeSingle();
       return data == null ? null : UserProfile.fromMap(data);
-    } catch (_) { return null; }
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<bool> isUserBlocked(String userId) async {
@@ -38,10 +41,12 @@ class AuthService {
       // column — not a key/value table — and regular users can't SELECT it
       // directly under RLS anyway. is_user_blocked() is the SECURITY DEFINER
       // function made for exactly this check (see supabase_system_settings.sql).
-      final blocked = await _sb
-          .rpc('is_user_blocked', params: {'check_user_id': userId});
+      final blocked =
+          await _sb.rpc('is_user_blocked', params: {'check_user_id': userId});
       return blocked as bool? ?? false;
-    } catch (_) { return false; }
+    } catch (_) {
+      return false;
+    }
   }
 
   // ── Sign Up ───────────────────────────────────────────────────────────────
@@ -53,65 +58,83 @@ class AuthService {
     required UserRole role,
   }) async {
     final nickname = fullName.split(' ').first;
-    final response = await _sb.auth.signUp(
-      email: email.trim(),
-      password: password,
-      data: {
-        'full_name': fullName,
-        'nickname':  nickname,
-        'role':      role.value,
-      },
-    );
 
-    if (response.user == null) return const AuthResult(error: 'Could not create account');
-    if (response.session != null) await _sb.auth.signOut();
-
-    // Send OTP via backend
     try {
+      final response = await _sb.auth.signUp(
+        email: email.trim(),
+        password: password,
+        data: {
+          'full_name': fullName,
+          'nickname': nickname,
+          'role': role.value,
+        },
+      );
+
+      if (response.user == null) {
+        return const AuthResult(error: 'Could not create account');
+      }
+      if (response.session != null) await _sb.auth.signOut();
+
+      // Send OTP via backend
       final res = await http.post(
         Uri.parse('$_backend/api/verify/send-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email.trim(), 'purpose': 'verification'}),
       );
       if (res.statusCode != 200) {
-        return const AuthResult(error: 'Account created but failed to send verification email');
+        return const AuthResult(
+            error: 'Account created but failed to send verification email');
       }
-    } catch (_) {
-      return const AuthResult(error: 'Account created but verification email failed');
+      return const AuthResult();
+    } on AuthException catch (e) {
+      return AuthResult(error: e.message);
+    } catch (e) {
+      return AuthResult(error: e.toString());
     }
-    return const AuthResult();
   }
 
   // ── Verify OTP ────────────────────────────────────────────────────────────
 
-  Future<AuthResult> verifyOtp({required String email, required String otp}) async {
+  Future<AuthResult> verifyOtp(
+      {required String email, required String otp}) async {
     try {
       final res = await http.post(
         Uri.parse('$_backend/api/verify/check-otp'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email.trim(), 'otp': otp.trim(), 'purpose': 'verification'}),
+        body: jsonEncode({
+          'email': email.trim(),
+          'otp': otp.trim(),
+          'purpose': 'verification'
+        }),
       );
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode != 200) {
-        return AuthResult(error: data['error'] as String? ?? 'Invalid verification code');
+        return AuthResult(
+            error: data['error'] as String? ?? 'Invalid verification code');
       }
       return const AuthResult();
-    } catch (_) { return const AuthResult(error: 'Failed to verify code'); }
+    } catch (_) {
+      return const AuthResult(error: 'Failed to verify code');
+    }
   }
 
   // ── Sign In ───────────────────────────────────────────────────────────────
 
-  Future<AuthResult> signIn({required String email, required String password, UserRole? role}) async {
+  Future<AuthResult> signIn(
+      {required String email, required String password, UserRole? role}) async {
     try {
       final response = await _sb.auth.signInWithPassword(
         email: email.trim(),
         password: password,
       );
-      if (response.user == null) return const AuthResult(error: 'Invalid credentials');
+      if (response.user == null)
+        return const AuthResult(error: 'Invalid credentials');
 
       // Optionally update role
       if (role != null) {
-        await _sb.from('profiles').update({'role': role.value}).eq('id', response.user!.id);
+        await _sb
+            .from('profiles')
+            .update({'role': role.value}).eq('id', response.user!.id);
       }
       return const AuthResult();
     } on AuthException catch (e) {
@@ -136,15 +159,19 @@ class AuthService {
       );
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode != 200 || data['success'] != true) {
-        return AuthResult(error: data['error'] as String? ?? 'Failed to send reset email');
+        return AuthResult(
+            error: data['error'] as String? ?? 'Failed to send reset email');
       }
       return const AuthResult();
-    } catch (_) { return const AuthResult(error: 'Reset email failed (server unavailable)'); }
+    } catch (_) {
+      return const AuthResult(error: 'Reset email failed (server unavailable)');
+    }
   }
 
   // ── Reset Password ────────────────────────────────────────────────────────
 
-  Future<AuthResult> resetPassword({required String token, required String newPassword}) async {
+  Future<AuthResult> resetPassword(
+      {required String token, required String newPassword}) async {
     try {
       final res = await http.post(
         Uri.parse('$_backend/api/reset-password'),
@@ -153,25 +180,34 @@ class AuthService {
       );
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode != 200 || data['success'] != true) {
-        return AuthResult(error: data['error'] as String? ?? 'Failed to reset password');
+        return AuthResult(
+            error: data['error'] as String? ?? 'Failed to reset password');
       }
       return const AuthResult();
-    } catch (_) { return const AuthResult(error: 'Password reset failed'); }
+    } catch (_) {
+      return const AuthResult(error: 'Password reset failed');
+    }
   }
 
   Future<AuthResult> updatePassword(String newPassword) async {
     try {
       await _sb.auth.updateUser(UserAttributes(password: newPassword));
       return const AuthResult();
-    } on AuthException catch (e) { return AuthResult(error: e.message); }
+    } on AuthException catch (e) {
+      return AuthResult(error: e.message);
+    }
   }
 
   // ── Switch Role ───────────────────────────────────────────────────────────
 
   Future<AuthResult> switchRole(String userId, UserRole newRole) async {
     try {
-      await _sb.from('profiles').update({'role': newRole.value}).eq('id', userId);
+      await _sb
+          .from('profiles')
+          .update({'role': newRole.value}).eq('id', userId);
       return const AuthResult();
-    } catch (e) { return AuthResult(error: e.toString()); }
+    } catch (e) {
+      return AuthResult(error: e.toString());
+    }
   }
 }

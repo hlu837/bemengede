@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'router.dart';
+import 'providers/auth_provider.dart' as ap;
 import 'utils/constants.dart';
 import 'services/data_service.dart';
 import 'services/gebeta_service.dart';
@@ -44,6 +45,31 @@ class BemengedeApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // While the initial session/profile check is in flight, `redirect`
+    // deliberately does nothing (see router.dart) so it doesn't make a
+    // decision before it knows whether you're logged in — but GoRouter still
+    // has to render *something* at `initialLocation`, which is the Landing
+    // Page. That produced a visible flash of the marketing landing page on
+    // every launch (including right after signing in) before the redirect
+    // caught up and sent you to the real dashboard. Gating on `loading` here
+    // means we show a blank splash instead of the Landing Page during that
+    // window, so there's nothing to flash — once loading flips to false the
+    // router mounts already knowing where it's headed.
+    final authInitializing =
+        ref.watch(ap.authProvider.select((s) => s.initializing));
+
+    if (authInitializing) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          backgroundColor: Color(AppColors.primary),
+          body: Center(
+            child: CircularProgressIndicator(color: Colors.white),
+          ),
+        ),
+      );
+    }
+
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(

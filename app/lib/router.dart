@@ -140,13 +140,33 @@ class _SectionText extends StatelessWidget {
   }
 }
 
+// ── Router refresh bridge ───────────────────────────────────────────────────
+// GoRouter needs to re-run `redirect` whenever auth state changes, but it
+// must NOT be torn down and rebuilt as a brand new GoRouter instance to do
+// that — a fresh GoRouter has no navigation history, so it renders
+// `initialLocation` (the landing page), silently discarding whatever screen
+// the user was actually on. `refreshListenable` is what lets a *single*,
+// stable GoRouter just re-check `redirect` in place.
+class _GoRouterRefreshNotifier extends ChangeNotifier {
+  _GoRouterRefreshNotifier(Ref ref) {
+    ref.listen<ap.AuthState>(ap.authProvider, (_, __) => notifyListeners());
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(ap.authProvider);
+  final refreshNotifier = _GoRouterRefreshNotifier(ref);
+  ref.onDispose(refreshNotifier.dispose);
 
   return GoRouter(
     // Start at landing page for all users; redirect will handle authentication flow
     initialLocation: AppConstants.routeLanding,
+    refreshListenable: refreshNotifier,
     redirect: (context, state) {
+      // Read fresh each time redirect runs (on navigation, or whenever
+      // refreshNotifier fires) instead of closing over a stale snapshot —
+      // this provider's build function no longer re-runs on every auth
+      // change, so `ref.watch` here would never update.
+      final authState = ref.read(ap.authProvider);
       if (authState.loading) return null;
       final authenticated = authState.isAuthenticated;
       final loc = state.matchedLocation;

@@ -158,9 +158,11 @@ class _SenderPackagesScreenState extends ConsumerState<SenderPackagesScreen>
 
   @override
   Widget build(BuildContext context) {
-    final pending = _packages
-        .where((p) => p.status == 'pending' || p.status == 'matched')
-        .toList();
+    // Only truly-unmatched packages belong here. A 'matched' package
+    // already has a row in _inTransit (fetched separately from
+    // `deliveries`) — leaving it in this list too made it look like the
+    // package was "still pending" even after a traveler had accepted it.
+    final pending = _packages.where((p) => p.status == 'pending').toList();
     final draftsAndCancelled = _packages
         .where((p) => p.status == 'expired' || p.status == 'cancelled')
         .toList();
@@ -689,7 +691,8 @@ class _PaymentStatusBadge extends StatelessWidget {
 class PostPackageSheet extends ConsumerStatefulWidget {
   final String userId;
   final VoidCallback onSuccess;
-  const PostPackageSheet({super.key, required this.userId, required this.onSuccess});
+  const PostPackageSheet(
+      {super.key, required this.userId, required this.onSuccess});
 
   @override
   ConsumerState<PostPackageSheet> createState() => _PostPackageSheetState();

@@ -43,6 +43,10 @@ class _TravelerDashboardScreenState
   // ═══════════════════════════════════════════════════════════════════════════
   bool _isLive = false;
   bool _togglingLive = false;
+  // Whether we've already done the "force Offline on entry" reset for this
+  // dashboard mount — only the very first load after sign-in should do this;
+  // later pull-to-refreshes must keep reflecting the traveler's real status.
+  bool _initialLiveSynced = false;
 
   static const _navItems = [
     DrawerNavItem(
@@ -112,9 +116,20 @@ class _TravelerDashboardScreenState
             d.paymentStatus == 'commission_due' ||
             d.paymentStatus == 'sender_confirmed')
         .length;
-    // NEW: pick up the traveler's current Live status (e.g. they went live
-    // on another device, or the app was killed and relaunched).
-    final isLive = await _svc.fetchTravelerLiveStatus(user.id);
+    // Live status: every fresh sign-in/dashboard mount should start Off —
+    // the traveler must explicitly flip the toggle each session, it should
+    // never come back on by itself just because a stale `is_online` row was
+    // left set to true (e.g. the app got killed without a clean sign-out).
+    // Pull-to-refresh on an already-open dashboard, however, should keep
+    // reflecting the traveler's real current status.
+    bool isLive;
+    if (!_initialLiveSynced) {
+      await LocationTrackingService().goOffline();
+      isLive = false;
+      _initialLiveSynced = true;
+    } else {
+      isLive = await _svc.fetchTravelerLiveStatus(user.id);
+    }
 
     if (mounted) {
       setState(() {
@@ -175,13 +190,19 @@ class _TravelerDashboardScreenState
       // directly — same signed-in session, no reload.
       allowModeToggle: true,
       onModeToggle: () {
+        // Leaving Traveler mode — stop broadcasting Live status/position
+        // right away instead of waiting for a future dashboard reload.
+        if (LocationTrackingService().isOnline) {
+          LocationTrackingService().goOffline();
+        }
+        if (_isLive) setState(() => _isLive = false);
         ref.read(currentModeProvider.notifier).state = UserRole.sender;
         context.go(AppConstants.routeSender);
       },
       // ═══════════════════════════════════════════════════════════════════════
       // NEW: Pass notification badges to drawer
       // ═══════════════════════════════════════════════════════════════════════
-      
+
       body: _loading
           ? const LoadingSpinner()
           : RefreshIndicator(
@@ -249,8 +270,8 @@ class _TravelerDashboardScreenState
                             ? const SizedBox(
                                 width: 24,
                                 height: 24,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2.5),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2.5),
                               )
                             : Switch(
                                 value: _isLive,
@@ -270,7 +291,7 @@ class _TravelerDashboardScreenState
                       padding: const EdgeInsets.only(bottom: 16),
                       child: GestureDetector(
                         onTap: () =>
-    context.go(AppConstants.routeTravelerCommission),
+                            context.go(AppConstants.routeTravelerCommission),
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -405,8 +426,8 @@ class _TravelerDashboardScreenState
                           _action(
                             Icons.payment_rounded,
                             'Pay Commission ($_pendingCommissions pending)',
-                          () => context
-    .go(AppConstants.routeTravelerCommission),
+                            () => context
+                                .go(AppConstants.routeTravelerCommission),
                             color: const Color(0xFFD97706),
                           ),
                         ],
